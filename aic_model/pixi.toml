@@ -8,11 +8,17 @@ channels = [
 ]
 
 [package.host-dependencies]
+ros2-distro-mutex = "0.14.*"
 ros-kilted-aic-control-interfaces = { path = "../aic_interfaces/aic_control_interfaces" }
 ros-kilted-aic-model-interfaces = { path = "../aic_interfaces/aic_model_interfaces" }
 ros-kilted-aic-task-interfaces = { path = "../aic_interfaces/aic_task_interfaces" }
 
 [package.build-dependencies]
+ros2-distro-mutex = "0.14.*"
 ros-kilted-aic-control-interfaces = { path = "../aic_interfaces/aic_control_interfaces" }
 ros-kilted-aic-model-interfaces = { path = "../aic_interfaces/aic_model_interfaces" }
 ros-kilted-aic-task-interfaces = { path = "../aic_interfaces/aic_task_interfaces" }
+
+[package.build.config]
+# The pinned backend does not include runtime Python files in its default globs.
+extra-input-globs = ["aic_model/**/*.py"]

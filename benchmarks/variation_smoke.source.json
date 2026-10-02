@@ -1,0 +1,7 @@
+{
+  "seed": 20260921,
+  "repetitions": 1,
+  "qualification_start_conditions_verified": false,
+  "template_sha256": "9f987c07174481474eec2c4fa21faf7d84dae4743a037b809ed7945efb2e5ef5",
+  "scope": "five NIC slots, two SC slots; bounded board and grasp perturbations"
+}

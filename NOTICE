@@ -1,0 +1,52 @@
+AI for Industry Challenge: Vision-Guided Cable Insertion
+Participant solution by pranay172 (https://github.com/pranay172)
+
+This repository is the AI for Industry Challenge toolkit,
+https://github.com/intrinsic-dev/aic, with its history up to commit
+ced3678cadaa446911a7d14c11b6fd1399509f08 (2026-05-11), the last toolkit
+commit before the qualification deadline, plus one commit containing this
+solution. The toolkit is licensed under the Apache License,
+Version 2.0 (see LICENSE). Files under aic_utils/aic_isaac carry their own
+BSD-3-Clause license.
+
+Added by this work: the participant policy and perception modules in
+aic_model/aic_model/ (every file except the toolkit's __init__.py,
+aic_model.py and policy.py), aic_model/models/, aic_model/tools/,
+benchmarks/, scripts/, tests/, pytest.ini, docs/solution/, docs/assets/
+(except task_board.jpg), .github/workflows/tests.yml and this NOTICE.
+
+docs/assets/task_board.jpg is a downscaled copy of aic_task_board.png from
+the toolkit repository's media branch (commit 8012d52), by the challenge
+organizers.
+
+policy.py, ground_truth.py and the policy_* modules split from them began as
+the toolkit's aic_model/aic_model/policy.py, so they keep its Intrinsic
+copyright header as the Apache License requires; their content beyond that is
+this work.
+
+Toolkit files modified by this work:
+- aic_model/aic_model/policy.py: replaced by the participant policy entry point.
+- aic_model/aic_model/aic_model.py: reworked goal execution. One goal at a
+  time, a policy worker that stops cooperatively on cancel, deactivate or
+  shutdown, a hold command when a run is stopped, rejection of motion
+  commands from a stopped run, a capture-episode reset at each insert_cable
+  call, and tolerance of the signal-shutdown race in the executor.
+- aic_example_policies/aic_example_policies/ros/CheatCode.py: sends its pose
+  targets through the shared aic_model motion helpers.
+- docker/aic_model/Dockerfile: runs aic_model.policy, ships the four
+  participant checkpoints with their AIC_* paths, and overlays the policy
+  source after the dependency layer.
+- docker/docker-compose.yaml: the same checkpoint paths and the solution
+  image tag.
+- pixi.toml: linux-64 only; pinned build variants (GCC 15.2, Python 3.12,
+  NumPy 2.2); PyTorch and torchvision from the CUDA 12.8 index.
+- The package pixi.toml files under aic_model, aic_interfaces, aic_utils and
+  aic_example_policies: EmPy 3.3.4 and ros2-distro-mutex pins, and runtime
+  Python files as aic_model build inputs.
+- pixi.lock: re-solved for these manifests.
+- .gitignore: ignores local run, capture and test directories.
+- README.md: rewritten for this solution.
+
+Removed from the toolkit tree: the toolkit's CI workflows and issue templates
+under .github/, which target the upstream repository. This repository's own
+workflow, .github/workflows/tests.yml, runs the offline test suite.

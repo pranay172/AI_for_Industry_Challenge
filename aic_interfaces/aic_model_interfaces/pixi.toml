@@ -8,7 +8,13 @@ channels = [
 ]
 
 [package.host-dependencies]
+# Match the locked ROS template engine; EmPy 4 breaks the bundled Rust generator.
+empy = "==3.3.4"
+ros2-distro-mutex = "0.14.*"
 ros-kilted-aic-control-interfaces = { path = "../aic_control_interfaces" }
 
 [package.build-dependencies]
+# Match the locked ROS template engine; EmPy 4 breaks the bundled Rust generator.
+empy = "==3.3.4"
+ros2-distro-mutex = "0.14.*"
 ros-kilted-aic-control-interfaces = { path = "../aic_control_interfaces" }

@@ -15,7 +15,7 @@ services:
       AIC_MODEL_PASSWD: CHANGE_IN_PROD
       # AIC_ENABLE_ACL: true
   model:
-    image: my-solution:v1
+    image: my-solution:v4
     build:
       dockerfile: docker/aic_model/Dockerfile
       context: ..
@@ -27,6 +27,10 @@ services:
       ZENOH_ROUTER_CHECK_ATTEMPTS: -1
       AIC_ROUTER_ADDR: eval:7447
       AIC_MODEL_PASSWD: CHANGE_IN_PROD
+      AIC_SFP_DETECTOR_PATH: /ws_aic/src/aic/aic_model/models/sfp_port_detector.pt
+      AIC_SC_PORT_DETECTOR_PATH: /ws_aic/src/aic/aic_model/models/sc_port_detector.pt
+      AIC_PLUG_POSE_SFP_PATH: /ws_aic/src/aic/aic_model/models/sfp_plug_pose.pt
+      AIC_PLUG_POSE_SC_PATH: /ws_aic/src/aic/aic_model/models/sc_plug_pose.pt
       # AIC_ENABLE_ACL: true
 networks:
   default:

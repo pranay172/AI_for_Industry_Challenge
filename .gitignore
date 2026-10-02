@@ -16,3 +16,9 @@ aic_utils/aic_mujoco/mjcf/*.png
 # Ignore aic_isaac usd assets
 aic_utils/aic_isaac/aic_isaaclab/source/aic_task/aic_task/tasks/manager_based/aic_task/Intrinsic_assets/
 
+test_env/
+# Isolated benchmark snapshots, captures and evaluator bags
+benchmark_runs/
+.pytest_cache/
+
+dataset_runs/

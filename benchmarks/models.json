@@ -1,0 +1,166 @@
+{
+  "sfp": {
+    "path": "aic_model/models/sfp_port_detector.pt",
+    "sha256": "8429f660a7ef6fa022728fa4643d3c84ff12dc6dc44ad47a85993bdae74ab71d",
+    "bytes": 5573805,
+    "role": "SFP port-face detector (both port faces of the NIC card)",
+    "training_run": "aic_model/tools/train_sc_port_detector.py --landmarks sfp_faces --preprocessing rail_conditioned_v1 --epochs 40 --batch-size 16 --lr 3e-4 --negative-heatmap-weight 0.25 --seed 7, backbone initialized from an earlier SC detector",
+    "training_provenance": "Retrained on the wide board-pose and rail-travel captures (validation split fixed before training); evaluated on the official qualification scenes, the sample config and wide-board generalization scenes.",
+    "validation": {
+      "epoch": 35,
+      "val_mean_px": 13.952817375937162,
+      "val_corner_px": 14.585855800548027,
+      "val_center_px": 11.420663677493703
+    },
+    "checkpoint_metadata": {
+      "img_size": 384,
+      "heatmap_size": 96,
+      "landmark_names": [
+        "sfp_port_0_tl",
+        "sfp_port_0_tr",
+        "sfp_port_0_br",
+        "sfp_port_0_bl",
+        "sfp_port_0_center",
+        "sfp_port_1_tl",
+        "sfp_port_1_tr",
+        "sfp_port_1_br",
+        "sfp_port_1_bl",
+        "sfp_port_1_center"
+      ],
+      "model_type": "SfpFaceHeatmapNet",
+      "preprocessing": "rail_conditioned_v1",
+      "decoder": "sfp_card_template_v1"
+    }
+  },
+  "sc": {
+    "path": "aic_model/models/sc_port_detector.pt",
+    "sha256": "2da8afa9dd4bea537c0c9e9b0925fd2722ccdec9567f8eb7fb0d7931d48b5f66",
+    "bytes": 5567205,
+    "role": "SC port-face detector, rail-conditioned",
+    "training_run": "aic_model/tools/train_sc_port_detector.py --landmarks sc --preprocessing rail_conditioned_v1 --epochs 30 --batch-size 16 --lr 1e-4 --negative-heatmap-weight 0.25 --seed 7, initialized from an earlier SC detector",
+    "training_provenance": "Retrained on the wide board-pose and rail-travel captures (validation split fixed before training); evaluated on the official qualification scenes, the sample config and wide-board generalization scenes.",
+    "validation": {
+      "epoch": 21,
+      "val_mean_px": 5.066731557643424,
+      "val_corner_px": 5.331621082003494,
+      "val_center_px": 4.007173460203144
+    },
+    "checkpoint_metadata": {
+      "img_size": 384,
+      "heatmap_size": 96,
+      "landmark_names": [
+        "sc_face_tl",
+        "sc_face_tr",
+        "sc_face_br",
+        "sc_face_bl",
+        "sc_face_center"
+      ],
+      "model_type": "ScPortHeatmapNet",
+      "preprocessing": "rail_conditioned_v1",
+      "decoder": "rail_template_face_v2"
+    }
+  },
+  "plug_sfp": {
+    "path": "aic_model/models/sfp_plug_pose.pt",
+    "sha256": "d8ff788425ce837d5b44ec95f641cf35e2310c3cc49a48dc0cf6414aec26b6b8",
+    "bytes": 5567117,
+    "role": "SFP plug keypoints in the gripper",
+    "training_run": "aic_model/tools/train_plug_pose.py train (40 epochs, seed 0)",
+    "training_provenance": "Grasp measurement: 384 px crops, trained on 632 privileged collection trials covering normal and shifted grasps (plug up to 18 mm deeper along TCP z), 6 captures per trial; ground-truth labels from privileged collection only; validated per trial offline and on shifted-grasp scenes.",
+    "validation": {
+      "epochs": 40,
+      "val_median_px": 0.4116206570604548
+    },
+    "checkpoint_metadata": {
+      "plug_type": "sfp",
+      "crop_px": 384,
+      "keypoints": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0068,
+          0.0042,
+          0.0
+        ],
+        [
+          -0.0068,
+          0.0042,
+          0.0
+        ],
+        [
+          -0.0068,
+          -0.0042,
+          0.0
+        ],
+        [
+          0.0068,
+          -0.0042,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -0.022
+        ]
+      ],
+      "min_confidence": 0.3
+    }
+  },
+  "plug_sc": {
+    "path": "aic_model/models/sc_plug_pose.pt",
+    "sha256": "113959d3ce3380f2d9f9b24ebae6a2a28bf5b09f5fe24fe293849fbc0bddf643",
+    "bytes": 5568325,
+    "role": "SC plug keypoints in the gripper",
+    "training_run": "aic_model/tools/train_plug_pose.py train (40 epochs, seed 0)",
+    "training_provenance": "Grasp measurement: 384 px crops, trained on 632 privileged collection trials covering normal and shifted grasps (plug up to 18 mm deeper along TCP z), 6 captures per trial; ground-truth labels from privileged collection only; validated per trial offline and on shifted-grasp scenes.",
+    "validation": {
+      "epochs": 40,
+      "val_median_px": 0.7927407642503053
+    },
+    "checkpoint_metadata": {
+      "plug_type": "sc",
+      "crop_px": 384,
+      "keypoints": [
+        [
+          0.00635,
+          0.0,
+          0.0
+        ],
+        [
+          -0.00635,
+          0.0,
+          0.0
+        ],
+        [
+          0.0108,
+          0.00365,
+          -0.0033
+        ],
+        [
+          -0.0108,
+          0.00365,
+          -0.0033
+        ],
+        [
+          -0.0108,
+          -0.00365,
+          -0.0033
+        ],
+        [
+          0.0108,
+          -0.00365,
+          -0.0033
+        ],
+        [
+          0.0,
+          0.0,
+          -0.012
+        ]
+      ],
+      "min_confidence": 0.3
+    }
+  }
+}

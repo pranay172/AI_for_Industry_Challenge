@@ -1,0 +1,81 @@
+{
+ "description": "Held-out set, 2026-10-01: 15 scenes whose seeds were fixed before the run, run once on a fixed revision. Official per-trial totals from the evaluator.",
+ "official_total": 1109.2022,
+ "trials": [
+  {
+   "trial": "seed_20261901_repeat_0_sfp_0",
+   "outcome": "full_insertion",
+   "total": 74.499
+  },
+  {
+   "trial": "seed_20261902_repeat_0_sfp_0",
+   "outcome": "full_insertion",
+   "total": 93.1716
+  },
+  {
+   "trial": "seed_20261903_repeat_0_sfp_0",
+   "outcome": "proximity",
+   "total": 20.9785
+  },
+  {
+   "trial": "seed_20261904_repeat_0_sfp_0",
+   "outcome": "full_insertion",
+   "total": 93.0961
+  },
+  {
+   "trial": "seed_20261905_repeat_0_sfp_0",
+   "outcome": "full_insertion",
+   "total": 95.5479
+  },
+  {
+   "trial": "seed_20261903_repeat_0_sfp_1",
+   "outcome": "no_insertion",
+   "total": 1.0
+  },
+  {
+   "trial": "seed_20261905_repeat_0_sfp_1",
+   "outcome": "proximity",
+   "total": 25.1682
+  },
+  {
+   "trial": "seed_20261907_repeat_0_sfp_1",
+   "outcome": "full_insertion",
+   "total": 95.029
+  },
+  {
+   "trial": "seed_20261909_repeat_0_sfp_1",
+   "outcome": "full_insertion",
+   "total": 93.2568
+  },
+  {
+   "trial": "seed_20261912_repeat_0_sfp_1",
+   "outcome": "full_insertion",
+   "total": 94.7265
+  },
+  {
+   "trial": "seed_20261901_repeat_0_sc_2",
+   "outcome": "full_insertion",
+   "total": 94.0606
+  },
+  {
+   "trial": "seed_20261902_repeat_0_sc_2",
+   "outcome": "full_insertion",
+   "total": 91.5743
+  },
+  {
+   "trial": "seed_20261903_repeat_0_sc_2",
+   "outcome": "full_insertion",
+   "total": 79.4806
+  },
+  {
+   "trial": "seed_20261904_repeat_0_sc_2",
+   "outcome": "partial_insertion",
+   "total": 63.7727
+  },
+  {
+   "trial": "seed_20261905_repeat_0_sc_2",
+   "outcome": "full_insertion",
+   "total": 93.8405
+  }
+ ]
+}

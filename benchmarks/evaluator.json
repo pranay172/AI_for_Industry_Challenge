@@ -1,0 +1,4 @@
+{
+  "image": "ghcr.io/intrinsic-dev/aic/aic_eval@sha256:9aa2ffdbb946d38edde1bac7b5f02a44cfbea26e3b04a9c74e09f14c97472923",
+  "note": "Official image resolved on 2026-09-20; no upstream source-revision label is provided. Historical cloud evaluator identity is unverified."
+}

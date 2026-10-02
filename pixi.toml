@@ -2,10 +2,18 @@
 name = "aic"
 authors = ["Teo Koon Peng <koonpeng@intrinsic.ai>"]
 channels = ["robostack-kilted", "conda-forge"]
-platforms = ["linux-64", "osx-arm64"]
+platforms = ["linux-64"]
 version = "0.1.0"
 conda-pypi-map = { "robostack-kilted" = "robostack_mapping.json" }
 preview = ["pixi-build"]
+
+# Keep source-package build metadata stable on cold builds. Without these
+# variants, newer compiler/NumPy run exports invalidate the committed lock.
+[workspace.build-variants]
+c_compiler_version = ["15.2.*"]
+cxx_compiler_version = ["15.2.*"]
+python = ["3.12.*"]
+numpy = ["2.2.*"]
 
 [target.linux-64.dependencies]
 evdev = ">=1.9.2,<2"
@@ -35,6 +43,12 @@ ros-kilted-std-msgs = "*"                                                       
 ros-kilted-std-srvs = "*"
 ros-kilted-tf2-ros-py = "*"
 setuptools = ">=71.0.0,<81.0.0"                                                        # required by lerobot==0.4.3
+
+[target.linux-64.pypi-dependencies]
+# RTX 5050 / Blackwell (sm_120) requires PyTorch built with CUDA 12.8+.
+# The default lerobot dep pulls cu126 which lacks sm_120 kernel images.
+torch = { version = ">=2.7.0", index = "https://download.pytorch.org/whl/cu128" }
+torchvision = { version = ">=0.22.0", index = "https://download.pytorch.org/whl/cu128" }
 
 [pypi-dependencies]
 huggingface-hub = { version = "~=1.7" }

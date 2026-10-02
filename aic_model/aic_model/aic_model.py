@@ -15,11 +15,15 @@
 #
 
 
+import copy
 import importlib
 import inspect
 import numpy as np
 import rclpy
 import threading
+import time
+from dataclasses import dataclass, field
+from rclpy.clock import Clock, ClockType
 
 from aic_control_interfaces.msg import (
     JointMotionUpdate,
@@ -36,6 +40,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.action.server import ServerGoalHandle
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.impl.implementation_singleton import rclpy_implementation
 from rclpy.lifecycle import (
     LifecycleNode,
     LifecycleState,
@@ -48,6 +53,20 @@ from std_srvs.srv import Empty
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from trajectory_msgs.msg import JointTrajectoryPoint
+
+
+class PolicyCancelled(Exception):
+    """Internal cooperative stop; never interpreted as insertion success."""
+
+
+@dataclass
+class PolicyExecution:
+    goal: object
+    stop: threading.Event = field(default_factory=threading.Event)
+    thread: object = None
+    result: bool = False
+    error: str = ""
+    cancel_requested: bool = False
 
 
 class AicModel(LifecycleNode):
@@ -80,7 +99,7 @@ class AicModel(LifecycleNode):
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(
-            buffer=self._tf_buffer, node=self, spin_thread=True
+            buffer=self._tf_buffer, node=self, spin_thread=False
         )
 
         self.cancel_service = self.create_service(
@@ -92,8 +111,12 @@ class AicModel(LifecycleNode):
             Observation, "observations", self.observation_callback, 10
         )
         self._action_callback_group = ReentrantCallbackGroup()
-        self._action_thread = None
-        self._action_thread_result = None
+        self._execution = None
+        self._last_joint_motion_update = None
+        self._command_lock = threading.RLock()
+        self._goal_reserved = False
+        self._worker_local = threading.local()
+        self._steady_clock = Clock(clock_type=ClockType.STEADY_TIME)
         self.action_server = ActionServer(
             self,
             InsertCable,
@@ -132,17 +155,22 @@ class AicModel(LifecycleNode):
 
     def on_deactivate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"on_deactivate({state})")
+        self.stop_policy()
         self.is_active = False
         return super().on_deactivate(state)
 
     def on_cleanup(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"on_cleanup({state})")
+        self.stop_policy()
         self.is_active = False
+        if self.worker_running():
+            return TransitionCallbackReturn.FAILURE
         self._policy = None
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"on_shutdown({state})")
+        self.stop_policy()
         self.is_active = False
         self.destroy_publisher(self.joint_motion_update_pub)
         self.joint_motion_update_pub = None
@@ -155,6 +183,7 @@ class AicModel(LifecycleNode):
 
     def cancel_task_callback(self, request, response):
         self.get_logger().info("cancel_task_callback()")
+        self.stop_policy()
         if self.goal_handle and self.goal_handle.is_active:
             self.goal_handle.abort()
         return Empty.Response()
@@ -162,26 +191,63 @@ class AicModel(LifecycleNode):
     def observation_callback(self, msg):
         self._observation_msg = msg
 
-    def insert_cable_goal_callback(self, goal_request):
-        if not self.is_active:
-            self.get_logger().error("aic_model lifecycle is not in the active state")
-            return GoalResponse.REJECT
+    def worker_running(self):
+        run = self._execution
+        return run is not None and run.thread is not None and run.thread.is_alive()
 
-        if self.goal_handle is not None and self.goal_handle.is_active:
-            self.get_logger().error(
-                "A goal is active and must be canceled before a new insert_cable goal can begin"
-            )
-            return GoalResponse.REJECT
-        else:
-            self.get_logger().info("Goal accepted")
+    def check_policy_execution(self):
+        run = getattr(self._worker_local, "execution", None)
+        if (run is None or run is not self._execution or run.stop.is_set()
+                or not self.is_active or not run.goal.is_active
+                or run.goal.is_cancel_requested):
+            raise PolicyCancelled()
+
+    def stop_policy(self):
+        # Serialize stop with publication. Once this returns no old worker can
+        # publish; a blocked third-party policy also cannot own the next goal.
+        with self._command_lock:
+            run = self._execution
+            if run is None or run.stop.is_set():
+                return
+            run.stop.set()
+            if self.is_active:
+                if self._target_mode == TargetMode.MODE_CARTESIAN and self._observation_msg is not None:
+                    hold = MotionUpdate()
+                    hold.header.frame_id = "base_link"
+                    hold.header.stamp = self.get_clock().now().to_msg()
+                    hold.pose = self._observation_msg.controller_state.tcp_pose
+                    hold.trajectory_generation_mode.mode = TrajectoryGenerationMode.MODE_POSITION
+                    for i in range(6):
+                        hold.target_stiffness[i * 7] = 90.0 if i < 3 else 45.0
+                        hold.target_damping[i * 7] = 45.0 if i < 3 else 18.0
+                    self.motion_update_pub.publish(hold)
+                elif self._target_mode == TargetMode.MODE_JOINT and self._last_joint_motion_update is not None:
+                    hold = copy.deepcopy(self._last_joint_motion_update)
+                    count = len(hold.target_stiffness)
+                    hold.target_state.velocities = [0.0] * count
+                    hold.target_state.accelerations = [0.0] * count
+                    hold.target_feedforward_torque = [0.0] * count
+                    hold.trajectory_generation_mode.mode = TrajectoryGenerationMode.MODE_VELOCITY
+                    self.joint_motion_update_pub.publish(hold)
+        if run.thread is not None and run.thread is not threading.current_thread():
+            run.thread.join(timeout=2.0)
+
+    def insert_cable_goal_callback(self, goal_request):
+        with self._command_lock:
+            if not self.is_active or self._goal_reserved or self.worker_running():
+                return GoalResponse.REJECT
+            self._goal_reserved = True
             return GoalResponse.ACCEPT
 
     def insert_cable_accepted_goal_callback(self, goal_handle):
         self.goal_handle = goal_handle
-        self.goal_handle.execute()
+        self._execution = PolicyExecution(goal_handle)
+        goal_handle.execute()
 
     def insert_cable_cancel_callback(self, goal_handle):
-        self.get_logger().info("Received insert_cable cancel request")
+        if self._execution is not None and self._execution.goal is goal_handle:
+            self._execution.cancel_requested = True
+            self.stop_policy()
         return CancelResponse.ACCEPT
 
     def observation_callable(self):
@@ -191,14 +257,19 @@ class AicModel(LifecycleNode):
         if self._target_mode != TargetMode.MODE_CARTESIAN:
             self.get_logger().info("Setting cartesian mode...")
             self.set_target_mode(TargetMode.MODE_CARTESIAN)
-        self.motion_update_pub.publish(motion_update)
+        with self._command_lock:
+            self.check_policy_execution()
+            self.motion_update_pub.publish(motion_update)
         return True
 
     def handle_joint_motion_update(self, joint_motion_update: JointMotionUpdate):
         if self._target_mode != TargetMode.MODE_JOINT:
             self.get_logger().info("Setting joint mode...")
             self.set_target_mode(TargetMode.MODE_JOINT)
-        self.joint_motion_update_pub.publish(joint_motion_update)
+        with self._command_lock:
+            self.check_policy_execution()
+            self.joint_motion_update_pub.publish(joint_motion_update)
+            self._last_joint_motion_update = copy.deepcopy(joint_motion_update)
         return True
 
     def move_robot(
@@ -212,6 +283,7 @@ class AicModel(LifecycleNode):
         joint-space commands. Within each of those spaces, it is possible to
         provide either position targets or velocity targets.
         """
+        self.check_policy_execution()
         if motion_update is not None and joint_motion_update is not None:
             self.get_logger().error(
                 "motion_update and joint_motion_update cannot both be provided simultaneously to move_robot()."
@@ -233,91 +305,116 @@ class AicModel(LifecycleNode):
         feedback_msg.message = feedback
         goal_handle.publish_feedback(feedback_msg)
 
-    def action_thread_func(self, goal_handle: ServerGoalHandle):
-        self._action_thread_result = self._policy.insert_cable(
-            task=goal_handle.request.task,
-            get_observation=lambda: self.observation_callable(),
-            move_robot=lambda motion_update=None, joint_motion_update=None: self.move_robot(
-                motion_update, joint_motion_update
-            ),
-            send_feedback=lambda feedback: self.send_feedback(goal_handle, feedback),
+    def action_thread_func(self, run, policy):
+        self._worker_local.execution = run
+        try:
+            self.check_policy_execution()
+            # Collection/example policies override insert_cable too; reset the
+            # capture episode at the common execution boundary for every policy.
+            begin_episode = getattr(policy, "begin_episode", None)
+            if begin_episode is not None:
+                begin_episode()
+            run.result = bool(policy.insert_cable(
+                task=run.goal.request.task,
+                get_observation=self.checked_observation,
+                move_robot=self.move_robot,
+                send_feedback=lambda feedback: self.checked_feedback(run.goal, feedback),
+            ))
+        except PolicyCancelled:
+            run.result = False
+        except Exception as exc:
+            run.error = f"{type(exc).__name__}: {exc}"
+            self.get_logger().error(f"Policy failed: {run.error}")
+        finally:
+            self.stop_policy()
+            self._worker_local.execution = None
+
+    def checked_observation(self):
+        self.check_policy_execution()
+        return self.observation_callable()
+
+    def checked_feedback(self, goal, feedback):
+        self.check_policy_execution()
+        self.send_feedback(goal, feedback)
+
+    async def insert_cable_execute_callback(self, goal_handle):
+        run = self._execution
+        run.thread = threading.Thread(
+            target=self.action_thread_func, args=(run, self._policy), daemon=True
         )
-        if self._action_thread_result is None:
-            self.get_logger().warn("insert_cable() returned None. Assuming False...")
-            self._action_thread_result = False
-
-    async def insert_cable_execute_callback(self, goal_handle: ServerGoalHandle):
-        self.get_logger().info("Entering insert_cable_execute_callback()")
-        self._action_thread_result = None
-        self._action_thread = threading.Thread(
-            target=self.action_thread_func,
-            kwargs={
-                "goal_handle": goal_handle,
-            },
-        )
-        self._action_thread.start()
-
-        while rclpy.ok():
-            self.get_logger().info("insert_cable execute loop")
-
-            # First, wait a bit so this loop doesn't consume much CPU time.
-            # This must be an async wait in order for other callbacks to run.
-            wait_future = Future()
-
-            def done_waiting():
-                wait_future.set_result(None)
-
-            wait_timer = self.create_timer(1.0, done_waiting, clock=self.get_clock())
-            await wait_future
-            wait_timer.cancel()
-            self.destroy_timer(wait_timer)
-
-            # Check if a cancellation request has arrived.
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                result = InsertCable.Result()
-                result.success = False
-                result.message = "Canceled via action client"
-                self.get_logger().info(
-                    "Exiting insert_cable execute loop due to cancellation request."
-                )
+        run.thread.start()
+        result = InsertCable.Result()
+        try:
+            while rclpy.ok():
+                # A steady timer remains responsive with paused simulation time.
+                future = Future()
+                def wake():
+                    if not future.done():
+                        future.set_result(None)
+                timer = self.create_timer(0.05, wake, clock=self._steady_clock)
+                try:
+                    await future
+                finally:
+                    timer.cancel()
+                    self.destroy_timer(timer)
+                if goal_handle.is_cancel_requested:
+                    self.stop_policy()
+                    goal_handle.canceled()
+                    result.message = "Canceled via action client"
+                    break
+                if not goal_handle.is_active or not self.is_active:
+                    self.stop_policy()
+                    if goal_handle.is_active:
+                        goal_handle.abort()
+                    result.message = "Stopped by lifecycle or cancel_task"
+                    break
+                if run.cancel_requested:
+                    continue  # Let the action server finish accepting cancellation.
+                if not run.thread.is_alive():
+                    result.success = run.result
+                    result.message = run.error or ("Policy completed" if run.result else "Policy failed")
+                    if run.result:
+                        goal_handle.succeed()
+                    else:
+                        goal_handle.abort()
+                    break
+            return result
+        finally:
+            self.stop_policy()
+            with self._command_lock:
                 self.goal_handle = None
-                return result
-
-            # Check if the goal was aborted via the cancel_task service,
-            # or if this aic_model node is deactivating or shutting down.
-            if not goal_handle.is_active or not self.is_active:
-                result = InsertCable.Result()
-                result.success = False
-                result.message = "Canceled via cancel_task service"
-                self.get_logger().info(
-                    "Exiting insert_cable execute loop due to cancel_task request."
-                )
-                self.goal_handle = None
-                return result
-
-            # Check if the task has been completed.
-            if not self._action_thread.is_alive():
-                self.get_logger().info(
-                    f"insert_cable() returned {self._action_thread_result}"
-                )
-                goal_handle.succeed()
-                result = InsertCable.Result()
-                result.success = self._action_thread_result
-                self.goal_handle = None
-                return result
-
-        self.get_logger().info("Exiting insert_cable execute loop")
+                self._goal_reserved = False
 
     def set_target_mode(self, target_mode):
-        target_mode_request = ChangeTargetMode.Request()
-        target_mode_request.target_mode.mode = target_mode
-        response = self._change_target_mode_client.call(target_mode_request)
-        if not response.success:
-            self.get_logger().error("Unable to set target mode")
-        else:
-            self._target_mode = target_mode
-            self.get_logger().info("Successfully set target mode")
+        self.check_policy_execution()
+        request = ChangeTargetMode.Request()
+        request.target_mode.mode = target_mode
+        future = self._change_target_mode_client.call_async(request)
+        deadline = time.monotonic() + 2.0
+        while not future.done():
+            try:
+                self.check_policy_execution()
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Controller target-mode service timed out")
+                time.sleep(0.01)
+            except Exception:
+                future.cancel()
+                raise
+        response = future.result()
+        if response is None or not response.success:
+            raise RuntimeError("Unable to set controller target mode")
+        self._target_mode = target_mode
+
+
+def spin_until_shutdown(executor, context):
+    """Handle signal shutdown racing wait-set construction, without hiding live errors."""
+    try:
+        executor.spin()
+    except rclpy_implementation.RCLError:
+        # Check before leaving rclpy.init's context manager: its __exit__ also
+        # invalidates the context and would otherwise hide genuine spin errors.
+        if context.ok():
+            raise
 
 
 def main(args=None):
@@ -326,7 +423,7 @@ def main(args=None):
             aic_model_node = AicModel()
             executor = MultiThreadedExecutor()
             executor.add_node(aic_model_node)
-            executor.spin()
+            spin_until_shutdown(executor, aic_model_node.context)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
 

@@ -17,6 +17,7 @@
 
 import numpy as np
 
+from aic_model import policy_motion as _mot
 from aic_model.policy import (
     GetObservationCallback,
     MoveRobotCallback,
@@ -221,19 +222,23 @@ class CheatCode(Policy):
         for t in range(0, 100):
             interp_fraction = t / 100.0
             try:
-                self.set_pose_target(
-                    move_robot=move_robot,
-                    pose=self.calc_gripper_pose(
-                        port_transform,
-                        slerp_fraction=interp_fraction,
-                        position_fraction=interp_fraction,
-                        z_offset=z_offset,
-                        reset_xy_integrator=True,
+                _mot.send_motion(
+                    self,
+                    move_robot,
+                    _mot.build_pose_command(
+                        self.calc_gripper_pose(
+                            port_transform,
+                            slerp_fraction=interp_fraction,
+                            position_fraction=interp_fraction,
+                            z_offset=z_offset,
+                            reset_xy_integrator=True,
+                        )
                     ),
                 )
             except TransformException as ex:
                 self.get_logger().warn(f"TF lookup failed during interpolation: {ex}")
             self.sleep_for(0.05)
+            self._capture_step(task, get_observation, "coarse_align")
 
         # Descend until the cable is inserted into the port.
         while True:
@@ -243,13 +248,18 @@ class CheatCode(Policy):
             z_offset -= 0.0005
             self.get_logger().info(f"z_offset: {z_offset:0.5}")
             try:
-                self.set_pose_target(
-                    move_robot=move_robot,
-                    pose=self.calc_gripper_pose(port_transform, z_offset=z_offset),
+                _mot.send_motion(
+                    self,
+                    move_robot,
+                    _mot.build_pose_command(
+                        self.calc_gripper_pose(port_transform, z_offset=z_offset)
+                    ),
                 )
             except TransformException as ex:
                 self.get_logger().warn(f"TF lookup failed during insertion: {ex}")
             self.sleep_for(0.05)
+            phase = "coarse_align" if z_offset > 0.05 else "pre_insert"
+            self._capture_step(task, get_observation, phase)
 
         self.get_logger().info("Waiting for connector to stabilize...")
         self.sleep_for(5.0)

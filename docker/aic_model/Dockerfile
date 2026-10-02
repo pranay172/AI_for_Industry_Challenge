@@ -3,10 +3,18 @@ FROM docker.io/library/ros:kilted-ros-core AS build
 # Install pixi
 RUN apt update && apt install -y git && curl -fsSL https://pixi.sh/install.sh | PIXI_VERSION=0.67.2 bash
 ENV PATH="/root/.pixi/bin:$PATH"
+ENV AIC_SFP_DETECTOR_PATH=/ws_aic/src/aic/aic_model/models/sfp_port_detector.pt
+ENV AIC_SC_PORT_DETECTOR_PATH=/ws_aic/src/aic/aic_model/models/sc_port_detector.pt
+ENV AIC_PLUG_POSE_SFP_PATH=/ws_aic/src/aic/aic_model/models/sfp_plug_pose.pt
+ENV AIC_PLUG_POSE_SC_PATH=/ws_aic/src/aic/aic_model/models/sc_plug_pose.pt
 
 # Add base dependencies
 COPY aic_example_policies /ws_aic/src/aic/aic_example_policies
-COPY aic_model /ws_aic/src/aic/aic_model
+# Build the Python package metadata/entry point once. Runtime source and weights
+# are overlaid after dependency installation, so policy edits reuse this layer.
+COPY aic_model/pixi.toml aic_model/package.xml aic_model/setup.py aic_model/setup.cfg /ws_aic/src/aic/aic_model/
+COPY aic_model/resource /ws_aic/src/aic/aic_model/resource
+COPY aic_model/aic_model/__init__.py /ws_aic/src/aic/aic_model/aic_model/__init__.py
 COPY aic_interfaces /ws_aic/src/aic/aic_interfaces
 COPY aic_utils /ws_aic/src/aic/aic_utils
 COPY pixi.toml pixi.lock /ws_aic/src/aic/
@@ -16,7 +24,12 @@ COPY pixi_env_setup.sh /ws_aic/src/aic/
 
 SHELL ["/bin/bash", "-c"]
 RUN --mount=type=cache,target=/root/.cache/rattler/cache --mount=type=cache,target=/ws_aic/src/aic/.pixi/build \
-    cd /ws_aic/src/aic && pixi install --locked
+  cd /ws_aic/src/aic && pixi install --locked
+
+# Python 3.12 is pinned by the workspace build variant. The benchmark runner
+# verifies every installed runtime .py hash against the frozen source snapshot.
+COPY aic_model /ws_aic/src/aic/aic_model
+COPY aic_model/aic_model /ws_aic/src/aic/.pixi/envs/default/lib/python3.12/site-packages/aic_model
 
 WORKDIR /ws_aic/src/aic
 COPY --chmod=755 <<"EOF" /entrypoint.sh
@@ -57,4 +70,4 @@ exec pixi run --as-is ros2 run aic_model aic_model "$@"
 EOF
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["--ros-args", "-p", "policy:=aic_example_policies.ros.CheatCode", "-p", "use_sim_time:=true"]
+CMD ["--ros-args", "-p", "policy:=aic_model.policy", "-p", "use_sim_time:=true"]
