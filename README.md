@@ -4,6 +4,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/pranay172/AI_for_Industry_Challenge/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/pranay172/AI_for_Industry_Challenge/actions/workflows/tests.yml/badge.svg"></a>
   <img alt="ROS 2 Kilted" src="https://img.shields.io/badge/ROS%202-Kilted-22314E?logo=ros&logoColor=white">
   <img alt="Python 3.12" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
   <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-%E2%89%A52.7-EE4C2C?logo=pytorch&logoColor=white">
